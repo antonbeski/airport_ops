@@ -471,7 +471,7 @@ def runway_wind_advisory(runways: list[RunwayRef], wind_from_deg: Optional[float
             "length_ft": rw.length_ft,
             "surface": rw.surface,
         })
-    advisories.sort(key=lambda a: -(a["headwind_kmh"] or -999))
+    advisories.sort(key=lambda a: -(a["headwind_kmh"] if a["headwind_kmh"] is not None else -999))
     return advisories
 
 
@@ -758,7 +758,7 @@ def traffic_statistics(aircraft: list[Aircraft]) -> dict:
         stats["category_counts"][ac.category_label()] += 1
         if isinstance(ac.alt_baro, (int, float)):
             stats["altitudes"].append(ac.alt_baro)
-        if ac.ground_speed:
+        if ac.ground_speed is not None:
             stats["speeds"].append(ac.ground_speed)
     return stats
 
@@ -831,7 +831,7 @@ def build_dashboard(airport: AirportRef, aircraft: list[Aircraft], military: lis
     count_history.append(len(aircraft))
 
     src_ok = lambda ok: "[green]\u25CF[/green]" if ok else "[red]\u25CF[/red]"
-    status_str = (f"ADS-B {src_ok(bool(aircraft) or 'adsb.lol: no aircraft data returned (network issue or empty airspace)' not in errors)}  "
+    status_str = (f"ADS-B {src_ok(bool(aircraft))}  "
                   f"Wx {src_ok(weather is not None)}  "
                   f"RWY {src_ok(bool(runways))}")
 
@@ -880,7 +880,7 @@ def build_dashboard(airport: AirportRef, aircraft: list[Aircraft], military: lis
             phase,
             ac.vertical_trend(),
             fmt_alt(ac.alt_baro),
-            f"{ac.ground_speed:.0f}" if ac.ground_speed else "-",
+            f"{ac.ground_speed:.0f}" if ac.ground_speed is not None else "-",
             f"{ac.distance_km:.1f}" if ac.distance_km is not None else "-",
             str(turn),
             ac.category_label(),
@@ -963,10 +963,10 @@ def build_dashboard(airport: AirportRef, aircraft: list[Aircraft], military: lis
     special_table.add_column("Type")
     special_table.add_column("Hex")
     special_table.add_column("Dist (km)")
-    for ac in sorted(military, key=lambda a: a.distance_km or 9e9)[:6]:
-        special_table.add_row("MIL", ac.hex, f"{ac.distance_km:.1f}" if ac.distance_km else "-")
-    for ac in sorted(pia, key=lambda a: a.distance_km or 9e9)[:6]:
-        special_table.add_row("PIA", ac.hex, f"{ac.distance_km:.1f}" if ac.distance_km else "-")
+    for ac in sorted(military, key=lambda a: a.distance_km if a.distance_km is not None else 9e9)[:6]:
+        special_table.add_row("MIL", ac.hex, f"{ac.distance_km:.1f}" if ac.distance_km is not None else "-")
+    for ac in sorted(pia, key=lambda a: a.distance_km if a.distance_km is not None else 9e9)[:6]:
+        special_table.add_row("PIA", ac.hex, f"{ac.distance_km:.1f}" if ac.distance_km is not None else "-")
     if not military and not pia:
         special_table.add_row("none detected", "", "")
     layout["special"].update(special_table)
@@ -1180,16 +1180,16 @@ def main():
         console.print(f"[green]Selected {chosen.name} ({chosen.icao}"
                       f"{'/' + chosen.iata if chosen.iata else ''})[/green]")
 
+    radius_nm = max(1, min(args.radius, 250))
+    interval = max(MIN_INTERVAL, min(args.interval, MAX_INTERVAL))
+
     if args.once:
-        layout, ok = run_once(icao, args.radius, time.time(), 0,
+        layout, ok = run_once(icao, radius_nm, time.time(), 0,
                                collections.deque(maxlen=1), collections.deque(maxlen=1),
-                               args.radius, args.interval, False)
+                               radius_nm, interval, False)
         if ok:
             console.print(layout)
         sys.exit(0 if ok else 1)
-
-    radius_nm = max(1, min(args.radius, 250))
-    interval = max(MIN_INTERVAL, min(args.interval, MAX_INTERVAL))
 
     key_listener = KeyListener()
     key_listener.start()
